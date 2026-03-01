@@ -622,6 +622,7 @@
   }
   .dot-nav .dot:hover { border-color: var(--primary); box-shadow: 0 0 8px rgba(88,166,255,0.4); }
   .dot-nav .dot.active { background: var(--primary); border-color: var(--primary); transform: scale(1.3); }
+  .dot-nav .dot.sub { width: 7px; height: 7px; border-width: 1.5px; }
   .dot-nav .dot::after {
     content: attr(title);
     position: absolute;
@@ -659,6 +660,7 @@
   <div class="links">
     <a href="report.html" id="nav-report" style="display:none;background:linear-gradient(135deg,var(--primary),var(--secondary));color:var(--bg);font-weight:700;padding:6px 14px;border-radius:8px;font-size:0.78rem;align-items:center;justify-content:center">📊 Report</a>
     <a href="#workshop">Workshop</a>
+    <a href="#landings">Landings</a>
     <a href="#philosophy">Philosophy</a>
     <a href="#family">Family</a>
     <a href="#journey">Journey</a>
@@ -760,6 +762,7 @@
     </div>
 
     <!-- Student Oracle Landings -->
+    <div id="landings" style="scroll-margin-top:80px">
     <div class="section-label reveal">Student Oracle Landings <span class="count">12</span></div>
     <div class="gallery reveal">
       <a class="gcard" href="https://kanyanat.buildwithoracle.com">
@@ -812,7 +815,10 @@
       </a>
     </div>
 
+    </div><!-- /landings -->
+
     <!-- Student Oracles -->
+    <div id="student-oracles" style="scroll-margin-top:80px">
     <div class="section-label reveal">Student Oracles <span class="count">17</span></div>
     <div class="grid reveal">
       <a class="chip" href="https://github.com/Soul-Brews-Studio/oracle-v2/issues/217"><span class="c-icon">🌀</span><div><span class="name">OS-1</span><span class="sub">JONAT</span></div></a>
@@ -834,7 +840,10 @@
       <a class="chip" href="https://github.com/Soul-Brews-Studio/oracle-v2/issues/263"><span class="c-icon">🐾</span><div><span class="name">Nana</span><span class="sub">pareenak-del</span></div></a>
     </div>
 
+    </div><!-- /student-oracles -->
+
     <!-- Senior Projects -->
+    <div id="senior-projects" style="scroll-margin-top:80px">
     <div class="section-label reveal">Senior Projects — โปรเจคจบ <span class="count">14</span></div>
     <div class="gallery reveal">
       <a class="gcard" href="https://rrrmar.github.io/smartpentest/#home" target="_blank">
@@ -894,6 +903,7 @@
         <div class="gcard-info"><span class="gcard-icon">👤</span><div class="gcard-text"><h3>Smart Attendance</h3><p>QR + FaceNet + VGG-Face</p></div><span class="gcard-tag proj">STUDENT</span></div>
       </a>
     </div>
+    </div><!-- /senior-projects -->
   </div>
 </section>
 
@@ -1242,6 +1252,9 @@ document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 <div class="dot-nav" aria-label="Section navigation">
   <a href="#" class="dot active" title="Home" data-section="hero"></a>
   <a href="#workshop" class="dot" title="Workshop" data-section="workshop"></a>
+  <a href="#landings" class="dot sub" title="Landings" data-section="landings"></a>
+  <a href="#student-oracles" class="dot sub" title="Oracles" data-section="student-oracles"></a>
+  <a href="#senior-projects" class="dot sub" title="Projects" data-section="senior-projects"></a>
   <a href="#philosophy" class="dot" title="Philosophy" data-section="philosophy"></a>
   <a href="#family" class="dot" title="Family" data-section="family"></a>
   <a href="#origin" class="dot" title="Origin" data-section="origin"></a>
@@ -1250,15 +1263,21 @@ document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 (function() {
   const dots = document.querySelectorAll('.dot-nav .dot');
   const navLinks = document.querySelectorAll('nav .links a:not(#nav-report)');
-  const sectionIds = [null, 'workshop', 'philosophy', 'family', 'journey'];
+  const sectionIds = [null, 'workshop', 'landings', 'student-oracles', 'senior-projects', 'philosophy', 'family', 'journey'];
   const sections = [
     document.querySelector('.hero'),
     document.getElementById('workshop'),
+    document.getElementById('landings'),
+    document.getElementById('student-oracles'),
+    document.getElementById('senior-projects'),
     document.getElementById('philosophy'),
     document.getElementById('family'),
     document.getElementById('origin')
   ];
+  var curIdx = -1;
   function setActive(idx) {
+    if (idx === curIdx) return;
+    curIdx = idx;
     dots.forEach(d => d.classList.remove('active'));
     navLinks.forEach(a => a.classList.remove('active'));
     if (idx >= 0) {
@@ -1267,10 +1286,18 @@ document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
       if (id) navLinks.forEach(a => { if (a.getAttribute('href') === '#' + id) a.classList.add('active'); });
     }
   }
-  const spy = new IntersectionObserver((entries) => {
-    entries.forEach(e => { if (e.isIntersecting) setActive(sections.indexOf(e.target)); });
-  }, { threshold: 0.1 });
-  sections.forEach(s => { if (s) spy.observe(s); });
+  // Scroll-position-based spy — handles nested subsections correctly
+  var rafId;
+  function updateSpy() {
+    var active = 0;
+    for (var i = sections.length - 1; i >= 0; i--) {
+      if (sections[i] && sections[i].getBoundingClientRect().top <= 120) { active = i; break; }
+    }
+    setActive(active);
+    rafId = 0;
+  }
+  window.addEventListener('scroll', function() { if (!rafId) rafId = requestAnimationFrame(updateSpy); }, { passive: true });
+  updateSpy();
 
   // Show Report in navbar only after scrolling past the buttons
   var wsBtn = document.getElementById('ws-buttons');
