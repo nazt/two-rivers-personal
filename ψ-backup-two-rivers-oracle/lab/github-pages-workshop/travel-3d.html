@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚂 Night Train — Chiang Mai → Phitsanulok</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #87CEEB; overflow: hidden; font-family: -apple-system, 'Noto Sans Thai', sans-serif; }
+  canvas { display: block; }
+  #hud {
+    position: absolute; top: 16px; left: 16px;
+    color: #e6edf3; z-index: 10;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    padding: 16px 20px;
+    backdrop-filter: blur(16px);
+    min-width: 240px;
+  }
+  #hud h2 { color: #1a6dd4; font-size: 18px; margin-bottom: 8px; }
+  #hud .loc { color: #cc3333; font-size: 15px; font-weight: 600; min-height: 22px; }
+  #hud .time { color: #2a7a2a; font-size: 13px; font-family: monospace; margin-top: 2px; }
+  #hud .stat { color: #555; font-size: 12px; margin-top: 8px; line-height: 1.5; }
+  #hud .stat span { color: #1a6dd4; }
+  #hud { color: #333; }
+  #controls {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; z-index: 10;
+  }
+  #controls button {
+    background: rgba(255, 255, 255, 0.7);
+    color: #1a6dd4; border: 1px solid rgba(26, 109, 212, 0.3);
+    border-radius: 10px; padding: 10px 22px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    backdrop-filter: blur(8px); transition: all 0.2s;
+  }
+  #controls button:hover { background: rgba(26, 109, 212, 0.2); }
+  #controls button.active { background: #1a6dd4; color: #fff; }
+  #speed {
+    position: absolute; bottom: 20px; right: 20px;
+    color: #8b949e; font-size: 12px; z-index: 10;
+  }
+  #progress {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 3px; background: rgba(88, 166, 255, 0.1); z-index: 10;
+  }
+  #progressBar {
+    height: 100%; width: 0%; background: linear-gradient(90deg, #2a7a2a, #1a6dd4, #cc3333);
+    transition: width 0.1s;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <h2>🚂 ขบวน 8 — Night Train</h2>
+  <div class="loc" id="locName">สถานีรถไฟเชียงใหม่</div>
+  <div class="time" id="locTime">Feb 27, 06:00</div>
+  <div class="stat">
+    Route: <span>Chiang Mai → Phitsanulok</span><br>
+    Distance: <span>~300 km</span> · Waypoints: <span>34</span><br>
+    <span style="color:#f778ba;">สองแคว — เมืองสองแคว</span>
+  </div>
+</div>
+
+<div id="controls">
+  <button onclick="togglePlay()" id="playBtn" class="active">⏸ Pause</button>
+  <button onclick="toggleCamera()" id="camBtn" class="active">📡 Monitor</button>
+  <button onclick="resetView()">↺ Reset</button>
+</div>
+
+<div id="speed"></div>
+<div id="progress"><div id="progressBar"></div></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// --- DATA ---
+const waypoints = [
+  { lat: 18.7513, lon: 98.9856, t: "Feb 27 06:00", p: "สถานีรถไฟเชียงใหม่", type: "start" },
+  { lat: 18.783165, lon: 99.028121, t: "06:16", p: "เชียงใหม่ — ออกเมือง", type: "travel" },
+  { lat: 18.715515, lon: 99.039492, t: "07:39", p: "สารภี", type: "travel" },
+  { lat: 18.636401, lon: 99.041813, t: "07:44", p: "ลำพูน", type: "travel" },
+  { lat: 18.595417, lon: 99.020958, t: "07:48", p: "ลำพูน", type: "travel" },
+  { lat: 18.500356, lon: 99.05973, t: "07:59", p: "ลำพูน — ใต้เมือง", type: "travel" },
+  { lat: 18.456107, lon: 99.087873, t: "08:14", p: "แม่ทา", type: "travel" },
+  { lat: 18.461019, lon: 99.137354, t: "08:18", p: "แม่ทา — เลี้ยวตะวันออก", type: "travel" },
+  { lat: 18.502889, lon: 99.202138, t: "08:24", p: "แม่ทา — เข้าภูเขา", type: "travel" },
+  { lat: 18.508437, lon: 99.263119, t: "08:34", p: "แม่ทา — ทางหลวง 3003", type: "travel" },
+  { lat: 18.392756, lon: 99.265662, t: "09:01", p: "ห้างฉัตร", type: "travel" },
+  { lat: 18.348319, lon: 99.35155, t: "09:17", p: "ห้างฉัตร — ภูเขา", type: "travel" },
+  { lat: 18.312283, lon: 99.413179, t: "09:22", p: "ลำปาง", type: "travel" },
+  { lat: 18.281088, lon: 99.469882, t: "09:27", p: "ลำปาง — สถานี", type: "stop" },
+  { lat: 18.223882, lon: 99.515192, t: "09:37", p: "ลำปาง — ออกเมือง", type: "travel" },
+  { lat: 18.202323, lon: 99.560287, t: "09:43", p: "แม่ทา — ขึ้นเขา", type: "travel" },
+  { lat: 18.240787, lon: 99.596923, t: "09:48", p: "เขาสูง", type: "travel" },
+  { lat: 18.256232, lon: 99.655373, t: "09:53", p: "แม่เมาะ", type: "travel" },
+  { lat: 18.264667, lon: 99.709782, t: "09:58", p: "แม่เมาะ", type: "travel" },
+  { lat: 18.277847, lon: 99.801018, t: "10:06", p: "แม่เมาะ — ตะวันออก", type: "travel" },
+  { lat: 18.297822, lon: 99.86354, t: "10:14", p: "เข้าอุตรดิตถ์", type: "travel" },
+  { lat: 18.211666, lon: 99.871989, t: "10:29", p: "อ.ลอง — พัก", type: "stop" },
+  { lat: 18.096358, lon: 99.866883, t: "10:49", p: "อ.ลอง", type: "travel" },
+  { lat: 18.040347, lon: 99.916938, t: "11:09", p: "อ.ลอง — ใต้", type: "travel" },
+  { lat: 17.97274, lon: 100.052057, t: "11:31", p: "เด่นชัย", type: "travel" },
+  { lat: 17.92115, lon: 100.062211, t: "11:36", p: "เด่นชัย — ที่ราบ", type: "travel" },
+  { lat: 17.839016, lon: 100.046134, t: "11:47", p: "อุตรดิตถ์", type: "travel" },
+  { lat: 17.77201, lon: 100.108, t: "11:57", p: "อุตรดิตถ์", type: "travel" },
+  { lat: 17.723428, lon: 100.126752, t: "12:02", p: "อุตรดิตถ์", type: "travel" },
+  { lat: 17.652857, lon: 100.122463, t: "12:07", p: "อุตรดิตถ์ — ออกเมือง", type: "travel" },
+  { lat: 17.599924, lon: 100.093404, t: "12:23", p: "บ้านโคก — สุดท้าย", type: "travel" },
+  { lat: 16.817458, lon: 100.25806, t: "16:23", p: "ม.ราชภัฏพิบูลสงคราม — ถึงแล้ว!", type: "stop" },
+  { lat: 16.83486, lon: 100.213662, t: "Feb 28 09:01", p: "PSRU — เวิร์กชอปเริ่ม", type: "stop" },
+  { lat: 16.834723, lon: 100.213696, t: "12:11", p: "PSRU — สองแคว กำลังสอน", type: "current" }
+];
+
+// --- SCENE SETUP ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.FogExp2(0x87CEEB, 0.004);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 800);
+// Top-down monitoring view
+camera.position.set(0, 40, 0.1);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.target.set(0, 0, -5);
+
+// --- COORDINATE MAPPING ---
+const centerLat = 17.8, centerLon = 99.6, scale = 60;
+const toXZ = (lat, lon) => [(lon - centerLon) * scale, -(lat - centerLat) * scale];
+
+function elev(lat) {
+  const base = lat > 18.2 ? 2.5 : lat > 17.5 ? 1.2 : 0.3;
+  return base + Math.sin(lat * 15) * 0.4;
+}
+
+// --- TERRAIN ---
+const terrainSize = 100;
+const terrainSeg = 80;
+const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSeg, terrainSeg);
+terrainGeo.rotateX(-Math.PI / 2);
+const tPos = terrainGeo.attributes.position;
+for (let i = 0; i < tPos.count; i++) {
+  const x = tPos.getX(i), z = tPos.getZ(i);
+  const lat = centerLat - z / scale;
+  const y = elev(lat) * 0.4
+    + Math.sin(x * 0.3 + z * 0.2) * 0.3
+    + Math.sin(x * 0.7) * Math.cos(z * 0.5) * 0.2;
+  tPos.setY(i, y);
+}
+terrainGeo.computeVertexNormals();
+
+const terrainMat = new THREE.MeshStandardMaterial({
+  color: 0x4a8a3a,
+  roughness: 0.9,
+  metalness: 0.05,
+  flatShading: true
+});
+scene.add(new THREE.Mesh(terrainGeo, terrainMat));
+
+// Grid overlay
+const gridMat = new THREE.MeshStandardMaterial({
+  color: 0x3a6a2a,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.1
+});
+scene.add(new THREE.Mesh(terrainGeo.clone(), gridMat));
+
+// --- ROUTE ---
+const routePts = waypoints.map(w => {
+  const [x, z] = toXZ(w.lat, w.lon);
+  return new THREE.Vector3(x, elev(w.lat) + 0.15, z);
+});
+const curve = new THREE.CatmullRomCurve3(routePts, false, 'centripetal', 0.3);
+
+// Glowing rails (two parallel lines)
+const railOffset = 0.12;
+for (let side of [-1, 1]) {
+  const pts = [];
+  for (let t = 0; t <= 1; t += 0.002) {
+    const p = curve.getPointAt(t);
+    const tan = curve.getTangentAt(t).normalize();
+    const right = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0, 1, 0)).normalize();
+    pts.push(p.clone().add(right.multiplyScalar(side * railOffset)));
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color: 0x2a5a8a, transparent: true, opacity: 0.6 });
+  scene.add(new THREE.Line(geo, mat));
+}
+
+// Route glow tube
+const tubeMat = new THREE.MeshStandardMaterial({
+  color: 0x58a6ff,
+  emissive: 0x1a3a6a,
+  emissiveIntensity: 0.8,
+  transparent: true,
+  opacity: 0.25,
+  roughness: 0.3
+});
+scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 500, 0.2, 8, false), tubeMat));
+
+// Route ground glow
+const glowTube = new THREE.MeshStandardMaterial({
+  color: 0x58a6ff,
+  emissive: 0x58a6ff,
+  emissiveIntensity: 0.3,
+  transparent: true,
+  opacity: 0.08
+});
+scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 300, 0.8, 8, false), glowTube));
+
+// --- WAYPOINT MARKERS ---
+const wpColors = { start: 0x3fb950, travel: 0x2a5a8a, stop: 0xf0883e, current: 0xf778ba };
+const wpSizes = { start: 0.35, travel: 0.1, stop: 0.25, current: 0.4 };
+
+waypoints.forEach((w, i) => {
+  const [x, z] = toXZ(w.lat, w.lon);
+  const y = elev(w.lat) + 0.15;
+
+  if (w.type === 'start' || w.type === 'stop' || w.type === 'current') {
+    // Beacon pillar
+    const pillarH = w.type === 'current' ? 4 : 2.5;
+    const pillarGeo = new THREE.CylinderGeometry(0.03, 0.03, pillarH, 6);
+    const pillarMat = new THREE.MeshStandardMaterial({
+      color: wpColors[w.type],
+      emissive: wpColors[w.type],
+      emissiveIntensity: 0.5,
+      transparent: true,
+      opacity: 0.4
+    });
+    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+    pillar.position.set(x, y + pillarH / 2, z);
+    scene.add(pillar);
+
+    // Top sphere
+    const sGeo = new THREE.SphereGeometry(wpSizes[w.type], 16, 16);
+    const sMat = new THREE.MeshStandardMaterial({
+      color: wpColors[w.type],
+      emissive: wpColors[w.type],
+      emissiveIntensity: 0.8
+    });
+    const sphere = new THREE.Mesh(sGeo, sMat);
+    sphere.position.set(x, y + pillarH, z);
+    scene.add(sphere);
+
+    // Ground ring
+    const ringGeo = new THREE.RingGeometry(0.3, 0.5, 24);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: wpColors[w.type],
+      emissive: wpColors[w.type],
+      emissiveIntensity: 0.5,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.set(x, y + 0.05, z);
+    scene.add(ring);
+  }
+});
+
+// --- BUILD TRAIN ---
+function buildTrain() {
+  const train = new THREE.Group();
+
+  // Locomotive body
+  const bodyGeo = new THREE.BoxGeometry(0.7, 0.5, 1.8);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xcc3333,
+    emissive: 0x331111,
+    emissiveIntensity: 0.3,
+    roughness: 0.4,
+    metalness: 0.6
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.4;
+  train.add(body);
+
+  // Roof
+  const roofGeo = new THREE.BoxGeometry(0.6, 0.1, 1.6);
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.3 });
+  const roof = new THREE.Mesh(roofGeo, roofMat);
+  roof.position.y = 0.7;
+  train.add(roof);
+
+  // Nose (front taper)
+  const noseGeo = new THREE.CylinderGeometry(0.25, 0.35, 0.5, 6);
+  noseGeo.rotateX(Math.PI / 2);
+  const nose = new THREE.Mesh(noseGeo, bodyMat);
+  nose.position.set(0, 0.4, 1.1);
+  train.add(nose);
+
+  // Chimney
+  const chimGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.35, 8);
+  const chimMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9 });
+  const chim = new THREE.Mesh(chimGeo, chimMat);
+  chim.position.set(0, 0.9, 0.5);
+  train.add(chim);
+
+  // Headlight
+  const hlGeo = new THREE.SphereGeometry(0.08, 8, 8);
+  const hlMat = new THREE.MeshStandardMaterial({
+    color: 0xffee88,
+    emissive: 0xffee88,
+    emissiveIntensity: 2
+  });
+  const hl = new THREE.Mesh(hlGeo, hlMat);
+  hl.position.set(0, 0.45, 1.35);
+  train.add(hl);
+
+  // Headlight beam
+  const beamLight = new THREE.SpotLight(0xffdd66, 8, 15, 0.4, 0.5, 1);
+  beamLight.position.set(0, 0.45, 1.35);
+  beamLight.target.position.set(0, 0, 5);
+  train.add(beamLight);
+  train.add(beamLight.target);
+
+  // Wheels (4 pairs)
+  const wheelGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 12);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.9, roughness: 0.2 });
+  for (let z of [-0.5, 0, 0.5, 0.9]) {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    wheel.position.set(0, 0.12, z);
+    train.add(wheel);
+  }
+
+  // Windows (both sides)
+  const winMat = new THREE.MeshStandardMaterial({
+    color: 0xffcc44,
+    emissive: 0xffaa22,
+    emissiveIntensity: 1.5,
+    transparent: true,
+    opacity: 0.9
+  });
+  for (let side of [-1, 1]) {
+    for (let z of [-0.3, 0.2]) {
+      const winGeo = new THREE.PlaneGeometry(0.001, 0.2, 0.3);
+      const win = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.18, 0.25), winMat);
+      win.position.set(side * 0.36, 0.45, z);
+      train.add(win);
+    }
+  }
+
+  // Carriage 1
+  const c1 = new THREE.Group();
+  const c1Body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.45, 1.5),
+    new THREE.MeshStandardMaterial({ color: 0x1a4a8a, emissive: 0x0a1a3a, emissiveIntensity: 0.2, roughness: 0.4, metalness: 0.5 })
+  );
+  c1Body.position.y = 0.38;
+  c1.add(c1Body);
+  const c1Roof = new THREE.Mesh(roofGeo.clone(), roofMat.clone());
+  c1Roof.position.y = 0.65;
+  c1.add(c1Roof);
+  // Carriage windows
+  for (let side of [-1, 1]) {
+    for (let z of [-0.4, -0.1, 0.2, 0.5]) {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.15, 0.2), winMat);
+      win.position.set(side * 0.31, 0.42, z);
+      c1.add(win);
+    }
+  }
+  for (let z of [-0.3, 0.3]) {
+    const wh = new THREE.Mesh(wheelGeo.clone(), wheelMat.clone());
+    wh.position.set(0, 0.12, z);
+    c1.add(wh);
+  }
+
+  // Carriage 2
+  const c2 = c1.clone();
+
+  return { locomotive: train, carriage1: c1, carriage2: c2 };
+}
+
+const { locomotive, carriage1, carriage2 } = buildTrain();
+scene.add(locomotive);
+scene.add(carriage1);
+scene.add(carriage2);
+
+// --- SMOKE PARTICLES ---
+const smokeCount = 200;
+const smokeGeo = new THREE.BufferGeometry();
+const smokePositions = new Float32Array(smokeCount * 3);
+const smokeSizes = new Float32Array(smokeCount);
+const smokeAlphas = new Float32Array(smokeCount);
+const smokeVelocities = [];
+
+for (let i = 0; i < smokeCount; i++) {
+  smokePositions[i * 3] = 0;
+  smokePositions[i * 3 + 1] = -100;
+  smokePositions[i * 3 + 2] = 0;
+  smokeSizes[i] = 0;
+  smokeAlphas[i] = 0;
+  smokeVelocities.push({ vx: 0, vy: 0, vz: 0, life: 0, maxLife: 0 });
+}
+
+smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePositions, 3));
+smokeGeo.setAttribute('size', new THREE.BufferAttribute(smokeSizes, 1));
+
+const smokeMat = new THREE.PointsMaterial({
+  color: 0x888899,
+  size: 0.5,
+  transparent: true,
+  opacity: 0.4,
+  sizeAttenuation: true,
+  depthWrite: false
+});
+const smoke = new THREE.Points(smokeGeo, smokeMat);
+scene.add(smoke);
+
+let smokeIdx = 0;
+function emitSmoke(pos) {
+  const i = smokeIdx % smokeCount;
+  smokePositions[i * 3] = pos.x + (Math.random() - 0.5) * 0.1;
+  smokePositions[i * 3 + 1] = pos.y + 0.9;
+  smokePositions[i * 3 + 2] = pos.z + (Math.random() - 0.5) * 0.1;
+  smokeSizes[i] = 0.15;
+  smokeVelocities[i] = {
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: 0.5 + Math.random() * 0.5,
+    vz: (Math.random() - 0.5) * 0.3,
+    life: 0,
+    maxLife: 1.5 + Math.random() * 1.5
+  };
+  smokeIdx++;
+}
+
+function updateSmoke(dt) {
+  for (let i = 0; i < smokeCount; i++) {
+    const v = smokeVelocities[i];
+    if (v.life < v.maxLife) {
+      v.life += dt;
+      const t = v.life / v.maxLife;
+      smokePositions[i * 3] += v.vx * dt;
+      smokePositions[i * 3 + 1] += v.vy * dt;
+      smokePositions[i * 3 + 2] += v.vz * dt;
+      smokeSizes[i] = 0.15 + t * 0.8;
+      v.vy *= 0.98;
+    } else {
+      smokePositions[i * 3 + 1] = -100;
+      smokeSizes[i] = 0;
+    }
+  }
+  smokeGeo.attributes.position.needsUpdate = true;
+  smokeGeo.attributes.size.needsUpdate = true;
+}
+
+// --- SPARK PARTICLES ---
+const sparkCount = 100;
+const sparkGeo = new THREE.BufferGeometry();
+const sparkPositions = new Float32Array(sparkCount * 3);
+const sparkVels = [];
+for (let i = 0; i < sparkCount; i++) {
+  sparkPositions[i * 3 + 1] = -100;
+  sparkVels.push({ vx: 0, vy: 0, vz: 0, life: 0, maxLife: 0 });
+}
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
+const sparkMat = new THREE.PointsMaterial({
+  color: 0xffaa44,
+  size: 0.08,
+  transparent: true,
+  opacity: 0.8,
+  sizeAttenuation: true,
+  depthWrite: false
+});
+scene.add(new THREE.Points(sparkGeo, sparkMat));
+
+let sparkIdx = 0;
+function emitSparks(pos) {
+  for (let j = 0; j < 3; j++) {
+    const i = sparkIdx % sparkCount;
+    sparkPositions[i * 3] = pos.x + (Math.random() - 0.5) * 0.5;
+    sparkPositions[i * 3 + 1] = pos.y;
+    sparkPositions[i * 3 + 2] = pos.z + (Math.random() - 0.5) * 0.5;
+    sparkVels[i] = {
+      vx: (Math.random() - 0.5) * 2,
+      vy: Math.random() * 2,
+      vz: (Math.random() - 0.5) * 2,
+      life: 0,
+      maxLife: 0.3 + Math.random() * 0.4
+    };
+    sparkIdx++;
+  }
+}
+
+function updateSparks(dt) {
+  for (let i = 0; i < sparkCount; i++) {
+    const v = sparkVels[i];
+    if (v.life < v.maxLife) {
+      v.life += dt;
+      sparkPositions[i * 3] += v.vx * dt;
+      sparkPositions[i * 3 + 1] += v.vy * dt - 4 * dt * dt;
+      sparkPositions[i * 3 + 2] += v.vz * dt;
+      v.vy -= 6 * dt;
+    } else {
+      sparkPositions[i * 3 + 1] = -100;
+    }
+  }
+  sparkGeo.attributes.position.needsUpdate = true;
+}
+
+// --- LIGHTS ---
+scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+
+const sunLight = new THREE.DirectionalLight(0xfff5e0, 1.5);
+sunLight.position.set(20, 40, 10);
+scene.add(sunLight);
+const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x3a7a3a, 0.8);
+scene.add(hemiLight);
+
+const trainGlow = new THREE.PointLight(0xff6644, 3, 12);
+scene.add(trainGlow);
+
+const destGlow = new THREE.PointLight(0xf778ba, 4, 20);
+const [dx, dz] = toXZ(waypoints[waypoints.length - 1].lat, waypoints[waypoints.length - 1].lon);
+destGlow.position.set(dx, 5, dz);
+scene.add(destGlow);
+
+// --- STARS ---
+// Clouds — simple white spheres scattered in the sky
+for (let i = 0; i < 15; i++) {
+  const cGeo = new THREE.SphereGeometry(2 + Math.random() * 3, 8, 8);
+  const cMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, roughness: 1 });
+  const cloud = new THREE.Mesh(cGeo, cMat);
+  cloud.position.set((Math.random() - 0.5) * 120, 20 + Math.random() * 15, (Math.random() - 0.5) * 120);
+  cloud.scale.set(1, 0.4, 1);
+  scene.add(cloud);
+}
+
+// --- STATE ---
+let playing = true;
+let camMode = 0; // 0=monitor, 1=on-train, 2=chase, 3=free
+const camModes = ['📡 Monitor', '🚂 On Train', '🎬 Chase', '🎥 Free'];
+let playT = 0;
+let playSpeed = 0.04;
+const clock = new THREE.Clock();
+
+function positionTrain(group, t, offset = 0) {
+  const ct = Math.max(0, Math.min(1, t - offset));
+  if (ct <= 0) { group.visible = false; return; }
+  group.visible = true;
+  const p = curve.getPointAt(ct);
+  const lookT = Math.min(1, ct + 0.005);
+  const ahead = curve.getPointAt(lookT);
+  group.position.copy(p);
+  group.lookAt(ahead);
+}
+
+function nearestWP(t) {
+  const p = curve.getPointAt(t);
+  let best = 0, bd = Infinity;
+  waypoints.forEach((w, i) => {
+    const [x, z] = toXZ(w.lat, w.lon);
+    const d = Math.sqrt((p.x - x) ** 2 + (p.z - z) ** 2);
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
+}
+
+// --- CONTROLS ---
+window.togglePlay = () => {
+  playing = !playing;
+  if (playing && playT >= 0.99) playT = 0;
+  document.getElementById('playBtn').textContent = playing ? '⏸ Pause' : '▶ Depart';
+  document.getElementById('playBtn').classList.toggle('active', playing);
+};
+
+window.toggleCamera = () => {
+  camMode = (camMode + 1) % camModes.length;
+  document.getElementById('camBtn').textContent = camModes[camMode];
+  document.getElementById('camBtn').classList.toggle('active', camMode !== 3);
+  if (camMode === 3) {
+    controls.enabled = true;
+    controls.enableRotate = true;
+    controls.enablePan = true;
+    controls.enableZoom = true;
+    camera.position.set(5, 25, 35);
+    controls.target.set(0, 0, -5);
+  }
+};
+
+window.resetView = () => {
+  playT = 0;
+  playing = false;
+  camMode = 0;
+  document.getElementById('playBtn').textContent = '▶ Depart';
+  document.getElementById('playBtn').classList.remove('active');
+  document.getElementById('camBtn').textContent = camModes[0];
+  controls.enabled = true;
+  controls.enableRotate = true;
+  controls.enablePan = true;
+  camera.position.set(0, 40, 0.1);
+  controls.target.set(0, 0, -5);
+};
+
+// Start at beginning
+positionTrain(locomotive, 0);
+positionTrain(carriage1, 0, 0.015);
+positionTrain(carriage2, 0, 0.03);
+
+// --- ANIMATE ---
+let smokeTimer = 0;
+let sparkTimer = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  if (playing) {
+    playT += dt * playSpeed;
+    if (playT >= 1) { playT = 1; playing = false; document.getElementById('playBtn').textContent = '▶ Replay'; }
+  }
+
+  // Position train
+  positionTrain(locomotive, playT);
+  positionTrain(carriage1, playT, 0.015);
+  positionTrain(carriage2, playT, 0.03);
+
+  // Train light follows
+  if (locomotive.visible) {
+    trainGlow.position.copy(locomotive.position);
+    trainGlow.position.y += 1.5;
+  }
+
+  // Smoke
+  if (playing && locomotive.visible) {
+    smokeTimer += dt;
+    if (smokeTimer > 0.03) {
+      emitSmoke(locomotive.position);
+      smokeTimer = 0;
+    }
+    sparkTimer += dt;
+    if (sparkTimer > 0.08) {
+      emitSparks(locomotive.position);
+      sparkTimer = 0;
+    }
+  }
+  updateSmoke(dt);
+  updateSparks(dt);
+
+  // HUD
+  if (locomotive.visible) {
+    const wpIdx = nearestWP(playT);
+    document.getElementById('locName').textContent = waypoints[wpIdx].p;
+    document.getElementById('locTime').textContent = waypoints[wpIdx].t;
+  }
+  document.getElementById('progressBar').style.width = (playT * 100) + '%';
+
+  // Camera modes
+  if (camMode !== 3 && locomotive.visible) {
+    const lp = locomotive.position;
+    const tan = curve.getTangentAt(Math.min(playT, 0.999)).normalize();
+    const right = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0, 1, 0)).normalize();
+
+    if (camMode === 0) {
+      // Monitor — top-down, scroll zoom only
+      controls.enabled = true;
+      controls.enableRotate = false;
+      controls.enablePan = false;
+      controls.enableZoom = true;
+      controls.target.copy(lp);
+      controls.update();
+    } else if (camMode === 1) {
+      // On train — sitting on top looking forward
+      controls.enabled = false;
+      const lookAhead = lp.clone().add(tan.clone().multiplyScalar(6));
+      lookAhead.y = lp.y + 0.3;
+      const camPos = lp.clone().add(new THREE.Vector3(0, 1.8, 0));
+      camera.position.lerp(camPos, 0.1);
+      camera.lookAt(lookAhead);
+    } else if (camMode === 2) {
+      // Chase — behind and above, cinematic
+      controls.enabled = false;
+      const lookAhead = lp.clone().add(tan.clone().multiplyScalar(10));
+      lookAhead.y = lp.y + 0.8;
+      const camPos = lp.clone()
+        .add(new THREE.Vector3(0, 5, 0))
+        .sub(tan.clone().multiplyScalar(8))
+        .add(right.clone().multiplyScalar(2));
+      camera.position.lerp(camPos, 0.03);
+      camera.lookAt(lookAhead);
+    }
+  } else {
+    controls.enabled = true;
+    controls.enableRotate = true;
+    controls.enablePan = true;
+    controls.enableZoom = true;
+    controls.update();
+  }
+
+  // Pulse destination
+  destGlow.intensity = 3 + Math.sin(clock.elapsedTime * 2) * 1.5;
+
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

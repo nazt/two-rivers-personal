@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Travel Timeline — Chiang Mai → Phitsanulok</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Noto Sans Thai', sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+  }
+  #map { width: 100%; height: 70vh; }
+  .timeline {
+    max-height: 30vh;
+    overflow-y: auto;
+    padding: 1rem 1.5rem;
+    background: #161b22;
+  }
+  .timeline h2 {
+    font-size: 1rem;
+    color: #58a6ff;
+    margin-bottom: 0.75rem;
+  }
+  .timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid #21262d;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .timeline-row:hover { background: rgba(88, 166, 255, 0.08); }
+  .timeline-row.active { background: rgba(63, 185, 80, 0.12); }
+  .time { color: #8b949e; min-width: 40px; font-family: monospace; }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot.start { background: #3fb950; }
+  .dot.travel { background: #58a6ff; }
+  .dot.stop { background: #f0883e; }
+  .dot.current { background: #f778ba; animation: blink 1.5s infinite; }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .place { flex: 1; }
+  .place .name { color: #e6edf3; }
+  .place .addr { color: #484f58; font-size: 0.75rem; }
+  .info-box {
+    position: absolute; top: 10px; left: 55px; z-index: 1000;
+    background: rgba(13, 17, 23, 0.92);
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    max-width: 320px;
+    backdrop-filter: blur(10px);
+  }
+  .info-box h3 { color: #58a6ff; font-size: 0.9rem; margin-bottom: 0.3rem; }
+  .info-box .stat { color: #8b949e; }
+  .info-box .stat span { color: #3fb950; font-weight: 600; }
+  .leaflet-popup-content-wrapper {
+    background: #161b22 !important;
+    color: #e6edf3 !important;
+    border-radius: 8px !important;
+    border: 1px solid #30363d;
+  }
+  .leaflet-popup-tip { background: #161b22 !important; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div class="info-box">
+  <h3>Chiang Mai → Phitsanulok</h3>
+  <div class="stat">Distance: <span>~300 km</span></div>
+  <div class="stat">Duration: <span>~6 hours driving</span></div>
+  <div class="stat">Feb 27 06:00 → Feb 28 12:11</div>
+</div>
+<div class="timeline" id="timeline">
+  <h2>Travel Timeline — Feb 27–28, 2026</h2>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const waypoints = [
+  { lat: 18.7513, lon: 98.9856, time: "27 06:00", place: "สถานีรถไฟเชียงใหม่", type: "start", addr: "Chiang Mai Train Station" },
+  { lat: 18.783165, lon: 99.028121, time: "27 06:16", place: "Mueang Chiang Mai", type: "travel", addr: "195/3 Moo 1" },
+  { lat: 18.715515, lon: 99.039492, time: "27 07:39", place: "Saraphi", type: "travel", addr: "Yothathikan CM-Lamphun Road" },
+  { lat: 18.636401, lon: 99.041813, time: "27 07:44", place: "Lamphun", type: "travel", addr: "Pa Sao-Mae Rong Noi Road" },
+  { lat: 18.595417, lon: 99.020958, time: "27 07:48", place: "Lamphun", type: "travel", addr: "Charoen Ta Road" },
+  { lat: 18.500356, lon: 99.05973, time: "27 07:59", place: "Lamphun", type: "travel", addr: "Route 11" },
+  { lat: 18.456107, lon: 99.087873, time: "27 08:14", place: "Mae Tha", type: "travel", addr: "Mae Tha District" },
+  { lat: 18.461019, lon: 99.137354, time: "27 08:18", place: "Mae Tha", type: "travel", addr: "Turning east" },
+  { lat: 18.502889, lon: 99.202138, time: "27 08:24", place: "Mae Tha", type: "travel", addr: "Route 1346" },
+  { lat: 18.508437, lon: 99.263119, time: "27 08:34", place: "Mae Tha", type: "travel", addr: "Lamphun 3003 Road" },
+  { lat: 18.392756, lon: 99.265662, time: "27 09:01", place: "Hang Chat", type: "travel", addr: "Heading south" },
+  { lat: 18.348319, lon: 99.35155, time: "27 09:17", place: "Hang Chat", type: "travel", addr: "Lampang 3033 Road" },
+  { lat: 18.312283, lon: 99.413179, time: "27 09:22", place: "Lampang", type: "travel", addr: "Mountain roads" },
+  { lat: 18.281088, lon: 99.469882, time: "27 09:27", place: "Lampang", type: "travel", addr: "107 Rotfai Road" },
+  { lat: 18.223882, lon: 99.515192, time: "27 09:37", place: "Lampang", type: "travel", addr: "Route 1346" },
+  { lat: 18.202323, lon: 99.560287, time: "27 09:43", place: "Mae Tha", type: "travel", addr: "Mountains" },
+  { lat: 18.240787, lon: 99.596923, time: "27 09:48", place: "Lampang", type: "travel", addr: "Ascending" },
+  { lat: 18.256232, lon: 99.655373, time: "27 09:53", place: "Mae Mo", type: "travel", addr: "84 Moo 5" },
+  { lat: 18.264667, lon: 99.709782, time: "27 09:58", place: "Mae Mo", type: "travel", addr: "Soi Pracha Rat" },
+  { lat: 18.277847, lon: 99.801018, time: "27 10:06", place: "Mae Mo", type: "travel", addr: "East bound" },
+  { lat: 18.297822, lon: 99.86354, time: "27 10:14", place: "Mae Mo", type: "travel", addr: "Approaching Uttaradit" },
+  { lat: 18.211666, lon: 99.871989, time: "27 10:29", place: "Long District", type: "stop", addr: "Rural Highway 4003" },
+  { lat: 18.096358, lon: 99.866883, time: "27 10:49", place: "Long District", type: "travel", addr: "Thetsaban 2 Road" },
+  { lat: 18.040347, lon: 99.916938, time: "27 11:09", place: "Long District", type: "travel", addr: "South bound" },
+  { lat: 17.97274, lon: 100.052057, time: "27 11:31", place: "Den Chai", type: "travel", addr: "Flat plains" },
+  { lat: 17.92115, lon: 100.062211, time: "27 11:36", place: "Den Chai", type: "travel", addr: "Route 11" },
+  { lat: 17.839016, lon: 100.046134, time: "27 11:47", place: "Uttaradit", type: "travel", addr: "Nearing Phitsanulok" },
+  { lat: 17.77201, lon: 100.108, time: "27 11:57", place: "Uttaradit", type: "travel", addr: "Uttaradit 4013 Road" },
+  { lat: 17.723428, lon: 100.126752, time: "27 12:02", place: "Uttaradit", type: "travel", addr: "Phatthanakan Soi 13" },
+  { lat: 17.652857, lon: 100.122463, time: "27 12:07", place: "Uttaradit", type: "travel", addr: "Pracha Ruam Chai Road" },
+  { lat: 17.599924, lon: 100.093404, time: "27 12:23", place: "Uttaradit", type: "travel", addr: "Ban Ko — last point before gap" },
+  { lat: 16.817458, lon: 100.25806, time: "27 16:23", place: "PSRU", type: "stop", addr: "Arrived at university" },
+  { lat: 16.83486, lon: 100.213662, time: "28 09:01", place: "PSRU Workshop", type: "stop", addr: "Workshop begins" },
+  { lat: 16.834723, lon: 100.213696, time: "28 12:11", place: "PSRU — Now", type: "current", addr: "Two Rivers teaching!" }
+];
+
+const map = L.map('map', {
+  zoomControl: true
+}).setView([17.8, 99.6], 8);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 19
+}).addTo(map);
+
+// Draw route line
+const routeCoords = waypoints.map(w => [w.lat, w.lon]);
+const routeLine = L.polyline(routeCoords, {
+  color: '#58a6ff',
+  weight: 3,
+  opacity: 0.7,
+  dashArray: '8, 6'
+}).addTo(map);
+
+map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+
+// Markers
+const colors = { start: '#3fb950', travel: '#58a6ff', stop: '#f0883e', current: '#f778ba' };
+const sizes = { start: 10, travel: 5, stop: 8, current: 12 };
+const markers = [];
+
+waypoints.forEach((w, i) => {
+  const marker = L.circleMarker([w.lat, w.lon], {
+    radius: sizes[w.type],
+    fillColor: colors[w.type],
+    color: w.type === 'current' ? '#f778ba' : '#0d1117',
+    weight: w.type === 'current' ? 3 : 1,
+    fillOpacity: 0.9
+  }).addTo(map);
+
+  marker.bindPopup(`
+    <div style="font-family: -apple-system, sans-serif; font-size: 13px;">
+      <strong>${w.place}</strong><br>
+      <span style="color: #8b949e;">${w.time}</span><br>
+      <span style="color: #58a6ff;">${w.addr}</span>
+    </div>
+  `);
+
+  markers.push(marker);
+});
+
+// Special markers for start and end
+L.marker([waypoints[0].lat, waypoints[0].lon], {
+  icon: L.divIcon({
+    html: '<div style="background:#3fb950;color:#0d1117;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;white-space:nowrap;">🚂 สถานีรถไฟเชียงใหม่</div>',
+    className: '',
+    iconAnchor: [-10, 10]
+  })
+}).addTo(map);
+
+const last = waypoints[waypoints.length - 1];
+L.marker([last.lat, last.lon], {
+  icon: L.divIcon({
+    html: '<div style="background:#f778ba;color:#0d1117;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;white-space:nowrap;">PSRU Workshop</div>',
+    className: '',
+    iconAnchor: [-10, 10]
+  })
+}).addTo(map);
+
+// Timeline
+const timeline = document.getElementById('timeline');
+waypoints.forEach((w, i) => {
+  const row = document.createElement('div');
+  row.className = 'timeline-row' + (w.type === 'current' ? ' active' : '');
+  row.innerHTML = `
+    <span class="time">${w.time.replace('Feb 27 ', '').replace('Feb 28 ', '28/')}</span>
+    <span class="dot ${w.type}"></span>
+    <span class="place">
+      <span class="name">${w.place}</span>
+      <span class="addr"> — ${w.addr}</span>
+    </span>
+  `;
+  row.onclick = () => {
+    map.setView([w.lat, w.lon], 13);
+    markers[i].openPopup();
+  };
+  timeline.appendChild(row);
+});
+</script>
+</body>
+</html>

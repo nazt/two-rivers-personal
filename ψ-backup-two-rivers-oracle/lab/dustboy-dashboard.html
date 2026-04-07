@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DustBoy Air Quality Dashboard</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #1a1a2e;
+  }
+  h1 { font-size: 1.5rem; font-weight: 600; color: #fff; }
+  h1 span { color: #6366f1; }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: #888;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    transition: background 0.3s;
+  }
+  .status-dot.connected { background: #22c55e; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: #12121a;
+    border: 1px solid #1a1a2e;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .summary-card .label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+  .summary-card .value { font-size: 2rem; font-weight: 700; margin-top: 4px; }
+
+  /* Charts section */
+  .charts-section {
+    margin-bottom: 24px;
+  }
+  .chart-container {
+    background: #12121a;
+    border: 1px solid #1a1a2e;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .chart-container h2 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+  }
+  .chart-wrap { position: relative; height: 250px; }
+
+  /* Node cards */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: #12121a;
+    border: 1px solid #1a1a2e;
+    border-radius: 12px;
+    padding: 20px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .card.flash {
+    border-color: #6366f1;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .node-name { font-size: 1.1rem; font-weight: 600; color: #fff; }
+  .node-ssid {
+    font-size: 0.75rem;
+    color: #666;
+    background: #1a1a2e;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .pm-display { display: flex; gap: 16px; margin-bottom: 12px; }
+  .pm-box {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    border-radius: 8px;
+    background: #1a1a2e;
+  }
+  .pm-box .pm-label { font-size: 0.7rem; color: #888; text-transform: uppercase; }
+  .pm-box .pm-value { font-size: 1.8rem; font-weight: 700; margin-top: 2px; }
+  .pm-box .pm-unit { font-size: 0.65rem; color: #666; }
+  .mini-chart { position: relative; height: 80px; margin-bottom: 12px; }
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .metric {
+    text-align: center;
+    padding: 8px;
+    background: #0e0e16;
+    border-radius: 6px;
+  }
+  .metric .m-label { font-size: 0.65rem; color: #666; }
+  .metric .m-value { font-size: 0.95rem; font-weight: 500; margin-top: 2px; }
+  .card-footer {
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: #444;
+  }
+
+  .aqi-good { color: #22c55e; }
+  .aqi-moderate { color: #eab308; }
+  .aqi-usg { color: #f97316; }
+  .aqi-unhealthy { color: #ef4444; }
+  .aqi-very-unhealthy { color: #a855f7; }
+  .aqi-hazardous { color: #991b1b; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>DustBoy</span> Air Quality</h1>
+  <div class="status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Connecting...</span>
+  </div>
+</header>
+
+<div class="summary">
+  <div class="summary-card">
+    <div class="label">Nodes Online</div>
+    <div class="value" id="sumNodes">0</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Avg PM2.5</div>
+    <div class="value" id="sumPM25">—</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Worst PM2.5</div>
+    <div class="value" id="sumWorst">—</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Avg Temp</div>
+    <div class="value" id="sumTemp">—</div>
+  </div>
+</div>
+
+<div class="charts-section">
+  <div class="chart-container">
+    <h2>PM2.5 All Nodes (Live)</h2>
+    <div class="chart-wrap"><canvas id="chartPM25"></canvas></div>
+  </div>
+  <div class="chart-container">
+    <h2>Temperature All Nodes (Live)</h2>
+    <div class="chart-wrap"><canvas id="chartTemp"></canvas></div>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const nodes = {};
+const HISTORY_LEN = 120;
+const NODE_COLORS = [
+  '#6366f1','#22c55e','#f97316','#eab308','#ef4444',
+  '#a855f7','#06b6d4','#ec4899','#14b8a6','#f43f5e',
+  '#8b5cf6','#10b981','#f59e0b','#3b82f6','#e879f9'
+];
+let colorIdx = 0;
+const nodeColorMap = {};
+
+function getNodeColor(id) {
+  if (!nodeColorMap[id]) {
+    nodeColorMap[id] = NODE_COLORS[colorIdx % NODE_COLORS.length];
+    colorIdx++;
+  }
+  return nodeColorMap[id];
+}
+
+// Chart.js defaults
+Chart.defaults.color = '#666';
+Chart.defaults.borderColor = '#1a1a2e';
+
+// PM2.5 overview chart
+const pm25Chart = new Chart(document.getElementById('chartPM25'), {
+  type: 'line',
+  data: { labels: [], datasets: [] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    interaction: { mode: 'nearest', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } },
+      annotation: {
+        annotations: {
+          moderate: { type: 'line', yMin: 35.4, yMax: 35.4, borderColor: '#eab30866', borderWidth: 1, borderDash: [4,4] },
+          usg: { type: 'line', yMin: 55.4, yMax: 55.4, borderColor: '#f9731666', borderWidth: 1, borderDash: [4,4] }
+        }
+      }
+    },
+    scales: {
+      x: { display: true, ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { display: false } },
+      y: { beginAtZero: true, grid: { color: '#1a1a2e' }, ticks: { font: { size: 10 } } }
+    }
+  }
+});
+
+// Temperature overview chart
+const tempChart = new Chart(document.getElementById('chartTemp'), {
+  type: 'line',
+  data: { labels: [], datasets: [] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    interaction: { mode: 'nearest', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } }
+    },
+    scales: {
+      x: { display: true, ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { display: false } },
+      y: { grid: { color: '#1a1a2e' }, ticks: { font: { size: 10 }, callback: v => v + '°' } }
+    }
+  }
+});
+
+// Per-node mini charts stored here
+const miniCharts = {};
+
+function aqiClass(pm25) {
+  if (pm25 <= 12) return 'aqi-good';
+  if (pm25 <= 35.4) return 'aqi-moderate';
+  if (pm25 <= 55.4) return 'aqi-usg';
+  if (pm25 <= 150.4) return 'aqi-unhealthy';
+  if (pm25 <= 250.4) return 'aqi-very-unhealthy';
+  return 'aqi-hazardous';
+}
+
+function aqiLabel(pm25) {
+  if (pm25 <= 12) return 'Good';
+  if (pm25 <= 35.4) return 'Moderate';
+  if (pm25 <= 55.4) return 'USG';
+  if (pm25 <= 150.4) return 'Unhealthy';
+  if (pm25 <= 250.4) return 'Very Unhealthy';
+  return 'Hazardous';
+}
+
+function aqiColor(pm25) {
+  if (pm25 <= 12) return '#22c55e';
+  if (pm25 <= 35.4) return '#eab308';
+  if (pm25 <= 55.4) return '#f97316';
+  if (pm25 <= 150.4) return '#ef4444';
+  if (pm25 <= 250.4) return '#a855f7';
+  return '#991b1b';
+}
+
+function ensureCardExists(id) {
+  let el = document.getElementById('card-' + id);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'card';
+    el.id = 'card-' + id;
+    document.getElementById('grid').appendChild(el);
+  }
+  return el;
+}
+
+function renderCard(id, node) {
+  const d = node.d;
+  const info = node.info;
+  const cls = aqiClass(d.pm2_5);
+  const temp = d.temperature_c != null ? d.temperature_c.toFixed(1) + '°' : (d.temp_c != null ? d.temp_c.toFixed(1) + '°' : '—');
+  const humid = d.humidity_rh != null ? d.humidity_rh.toFixed(0) + '%' : (d.humid_rh != null ? d.humid_rh.toFixed(0) + '%' : '—');
+  const pressure = d.pressure_pa != null ? (d.pressure_pa / 100).toFixed(0) + ' hPa' : '—';
+
+  return `
+    <div class="card-header">
+      <span class="node-name">${d.myName || d.nickname || id}</span>
+      <span class="node-ssid">${info.ssid || '—'}</span>
+    </div>
+    <div class="pm-display">
+      <div class="pm-box">
+        <div class="pm-label">PM2.5</div>
+        <div class="pm-value ${cls}">${d.pm2_5}</div>
+        <div class="pm-unit">${aqiLabel(d.pm2_5)}</div>
+      </div>
+      <div class="pm-box">
+        <div class="pm-label">PM10</div>
+        <div class="pm-value">${d.pm10}</div>
+        <div class="pm-unit">µg/m³</div>
+      </div>
+    </div>
+    <div class="mini-chart"><canvas id="mini-${id}"></canvas></div>
+    <div class="metrics">
+      <div class="metric"><div class="m-label">Temp</div><div class="m-value">${temp}</div></div>
+      <div class="metric"><div class="m-label">Humidity</div><div class="m-value">${humid}</div></div>
+      <div class="metric"><div class="m-label">Pressure</div><div class="m-value">${pressure}</div></div>
+    </div>
+    <div class="card-footer">
+      <span>RSSI: ${info.rssi || d.rssi || '—'} dBm</span>
+      <span>${node.lastSeen}</span>
+    </div>
+  `;
+}
+
+function updateMiniChart(id, node) {
+  const canvas = document.getElementById('mini-' + id);
+  if (!canvas) return;
+
+  const color = getNodeColor(id);
+  const labels = node.timestamps.slice(-60);
+  const pm25Data = node.history.slice(-60);
+  const pm10Data = (node.pm10History || []).slice(-60);
+
+  if (miniCharts[id]) {
+    miniCharts[id].data.labels = labels;
+    miniCharts[id].data.datasets[0].data = pm25Data;
+    miniCharts[id].data.datasets[1].data = pm10Data;
+    miniCharts[id].update('none');
+  } else {
+    miniCharts[id] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'PM2.5',
+            data: pm25Data,
+            borderColor: color,
+            backgroundColor: color + '20',
+            fill: true,
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.3
+          },
+          {
+            label: 'PM10',
+            data: pm10Data,
+            borderColor: '#ffffff33',
+            borderWidth: 1,
+            pointRadius: 0,
+            tension: 0.3,
+            borderDash: [3, 3]
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { display: false, beginAtZero: true }
+        }
+      }
+    });
+  }
+}
+
+function updateOverviewCharts() {
+  const allIds = Object.keys(nodes).filter(id => nodes[id].history.length > 0);
+  const maxLen = Math.max(...allIds.map(id => nodes[id].timestamps.length), 1);
+  const labels = (allIds[0] ? nodes[allIds[0]].timestamps : []).slice(-60);
+
+  // PM2.5 chart
+  pm25Chart.data.labels = labels;
+  pm25Chart.data.datasets = allIds.map(id => {
+    const n = nodes[id];
+    const color = getNodeColor(id);
+    return {
+      label: n.d.myName || n.d.nickname || id,
+      data: n.history.slice(-60),
+      borderColor: color,
+      backgroundColor: color + '10',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3
+    };
+  });
+  pm25Chart.update('none');
+
+  // Temp chart
+  tempChart.data.labels = labels;
+  tempChart.data.datasets = allIds.filter(id => nodes[id].tempHistory.length > 0).map(id => {
+    const n = nodes[id];
+    const color = getNodeColor(id);
+    return {
+      label: n.d.myName || n.d.nickname || id,
+      data: n.tempHistory.slice(-60),
+      borderColor: color,
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3
+    };
+  });
+  tempChart.update('none');
+}
+
+function updateSummary() {
+  const active = Object.values(nodes).filter(n => n.d && n.d.pm2_5 != null);
+  document.getElementById('sumNodes').textContent = active.length;
+  if (active.length === 0) return;
+
+  const pm25s = active.map(n => n.d.pm2_5);
+  const avg = pm25s.reduce((a, b) => a + b, 0) / pm25s.length;
+  const worst = Math.max(...pm25s);
+  const avgEl = document.getElementById('sumPM25');
+  avgEl.textContent = avg.toFixed(0);
+  avgEl.className = 'value ' + aqiClass(avg);
+
+  const worstEl = document.getElementById('sumWorst');
+  worstEl.textContent = worst;
+  worstEl.className = 'value ' + aqiClass(worst);
+
+  const temps = active.map(n => n.d.temperature_c || n.d.temp_c).filter(Boolean);
+  if (temps.length) {
+    document.getElementById('sumTemp').textContent = (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) + '°';
+  }
+}
+
+// Throttle overview chart updates to every 5 seconds
+let lastOverviewUpdate = 0;
+
+function updateAll() {
+  const grid = document.getElementById('grid');
+  const sorted = Object.entries(nodes)
+    .filter(([, n]) => n.d)
+    .sort((a, b) => (b[1].d.pm2_5 || 0) - (a[1].d.pm2_5 || 0));
+
+  sorted.forEach(([id, node]) => {
+    const el = ensureCardExists(id);
+    // Only re-render HTML if card is new or needs structure
+    if (!el.dataset.init) {
+      el.innerHTML = renderCard(id, node);
+      el.dataset.init = '1';
+    } else {
+      // Update values in place
+      el.innerHTML = renderCard(id, node);
+    }
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 600);
+
+    // Update mini chart after DOM is ready
+    requestAnimationFrame(() => updateMiniChart(id, node));
+  });
+
+  updateSummary();
+
+  const now = Date.now();
+  if (now - lastOverviewUpdate > 5000) {
+    updateOverviewCharts();
+    lastOverviewUpdate = now;
+  }
+}
+
+// MQTT connect
+const client = mqtt.connect('ws://127.0.0.1:9001');
+
+client.on('connect', () => {
+  document.getElementById('statusDot').classList.add('connected');
+  document.getElementById('statusText').textContent = 'Connected';
+  client.subscribe('DUSTBOY/#');
+});
+
+client.on('close', () => {
+  document.getElementById('statusDot').classList.remove('connected');
+  document.getElementById('statusText').textContent = 'Disconnected';
+});
+
+// Batch updates — collect messages, render at 1fps
+let pendingUpdate = false;
+
+client.on('message', (topic, message) => {
+  try {
+    const payload = JSON.parse(message.toString());
+    if (!payload.d) return;
+
+    const parts = topic.split('/');
+    const nodeId = parts[3] || 'unknown';
+    const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    if (!nodes[nodeId]) {
+      nodes[nodeId] = { history: [], pm10History: [], tempHistory: [], timestamps: [] };
+    }
+
+    const n = nodes[nodeId];
+    n.d = payload.d;
+    n.info = payload.info || {};
+    n.lastSeen = now;
+
+    if (payload.d.pm2_5 != null) {
+      n.history.push(payload.d.pm2_5);
+      n.pm10History.push(payload.d.pm10 || 0);
+      n.tempHistory.push(payload.d.temperature_c || payload.d.temp_c || null);
+      n.timestamps.push(now);
+      if (n.history.length > HISTORY_LEN) {
+        n.history.shift();
+        n.pm10History.shift();
+        n.tempHistory.shift();
+        n.timestamps.shift();
+      }
+    }
+
+    if (!pendingUpdate) {
+      pendingUpdate = true;
+      requestAnimationFrame(() => {
+        updateAll();
+        pendingUpdate = false;
+      });
+    }
+  } catch (e) {}
+});
+</script>
+</body>
+</html>

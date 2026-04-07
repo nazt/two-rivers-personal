@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub Pages Workshop — สองสายน้ำ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans Thai', sans-serif;
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+    color: #e6edf3;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .river-bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(56, 139, 253, 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 50%, rgba(63, 185, 80, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  header h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #58a6ff, #3fb950);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.3rem;
+  }
+
+  header p {
+    color: #8b949e;
+    font-size: 1.1rem;
+    font-weight: 300;
+  }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .step {
+    background: rgba(22, 27, 34, 0.8);
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .step::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, #58a6ff, #3fb950);
+    border-radius: 4px 0 0 4px;
+  }
+
+  .step:hover {
+    border-color: #58a6ff;
+    transform: translateX(4px);
+    box-shadow: 0 0 20px rgba(56, 139, 253, 0.1);
+  }
+
+  .step.active {
+    border-color: #3fb950;
+    box-shadow: 0 0 30px rgba(63, 185, 80, 0.15);
+  }
+
+  .step.done {
+    opacity: 0.6;
+  }
+
+  .step.done .step-number {
+    background: #3fb950;
+    color: #0d1117;
+  }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .step-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #30363d;
+    color: #58a6ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+
+  .step.active .step-number {
+    background: #58a6ff;
+    color: #0d1117;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4); }
+    50% { box-shadow: 0 0 0 10px rgba(88, 166, 255, 0); }
+  }
+
+  .step-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+  }
+
+  .step-time {
+    color: #8b949e;
+    font-size: 0.85rem;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .step-body {
+    padding-left: 3.5rem;
+    color: #c9d1d9;
+    line-height: 1.7;
+  }
+
+  .step-body code {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.15rem 0.5rem;
+    font-family: 'SF Mono', monospace;
+    font-size: 0.95rem;
+    color: #58a6ff;
+  }
+
+  .step-body .url {
+    color: #3fb950;
+    font-weight: 600;
+  }
+
+  .step-body ul {
+    list-style: none;
+    margin-top: 0.5rem;
+  }
+
+  .step-body ul li::before {
+    content: '→ ';
+    color: #58a6ff;
+  }
+
+  .tip {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(56, 139, 253, 0.08);
+    border-left: 3px solid #58a6ff;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.9rem;
+    color: #8b949e;
+  }
+
+  .tip strong { color: #58a6ff; }
+
+  footer {
+    text-align: center;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #21262d;
+    color: #484f58;
+    font-size: 0.85rem;
+  }
+
+  footer .oracle {
+    color: #58a6ff;
+    font-weight: 600;
+  }
+
+  .celebrate {
+    display: none;
+    text-align: center;
+    margin-top: 2rem;
+    padding: 2rem;
+    background: rgba(63, 185, 80, 0.08);
+    border: 1px solid #3fb950;
+    border-radius: 12px;
+  }
+
+  .celebrate h2 {
+    font-size: 1.8rem;
+    color: #3fb950;
+    margin-bottom: 0.5rem;
+  }
+
+  .celebrate p { color: #8b949e; font-size: 1.1rem; }
+
+  /* Click to advance */
+  .step { cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="river-bg"></div>
+<div class="container">
+
+  <header>
+    <h1>GitHub Pages Portfolio</h1>
+    <p>4 ขั้นตอน — เว็บไซต์ portfolio ของตัวเอง</p>
+  </header>
+
+  <div class="steps">
+
+    <div class="step active" id="s1" onclick="advance(1)">
+      <div class="step-header">
+        <div class="step-number">1</div>
+        <div class="step-title">สร้างบัญชี GitHub</div>
+        <div class="step-time">5 นาที</div>
+      </div>
+      <div class="step-body">
+        <ul>
+          <li>ไปที่ <code>github.com</code> แล้ว Sign Up</li>
+          <li>ตั้ง <strong>username</strong> ให้จำง่าย (จะเป็นชื่อเว็บเรา)</li>
+          <li>ใครมีแล้ว → Sign In ได้เลย</li>
+        </ul>
+        <div class="tip"><strong>Tip:</strong> username ควรเป็นภาษาอังกฤษ ตัวเล็ก ไม่มีเว้นวรรค</div>
+      </div>
+    </div>
+
+    <div class="step" id="s2" onclick="advance(2)">
+      <div class="step-header">
+        <div class="step-number">2</div>
+        <div class="step-title">สร้าง Repository</div>
+        <div class="step-time">3 นาที</div>
+      </div>
+      <div class="step-body">
+        <ul>
+          <li>กดปุ่ม <code>+</code> มุมขวาบน → <strong>New repository</strong></li>
+          <li>ชื่อ repo: <code class="url">username.github.io</code></li>
+          <li>เลือก <strong>Public</strong></li>
+          <li>ไม่ต้องติ๊ก README → กด <strong>Create repository</strong></li>
+        </ul>
+        <div class="tip"><strong>Tip:</strong> ชื่อต้องตรงกับ username เป๊ะ เช่น <code>somchai.github.io</code></div>
+      </div>
+    </div>
+
+    <div class="step" id="s3" onclick="advance(3)">
+      <div class="step-header">
+        <div class="step-number">3</div>
+        <div class="step-title">อัปโหลด HTML</div>
+        <div class="step-time">3 นาที</div>
+      </div>
+      <div class="step-body">
+        <ul>
+          <li>กด <strong>"uploading an existing file"</strong></li>
+          <li>ลากไฟล์ portfolio HTML เข้าไป</li>
+          <li>เปลี่ยนชื่อเป็น <code>index.html</code></li>
+          <li>กด <strong>Commit changes</strong></li>
+        </ul>
+        <div class="tip"><strong>Tip:</strong> ชื่อไฟล์ต้องเป็น <code>index.html</code> เท่านั้น ไม่งั้นเว็บจะไม่ขึ้น</div>
+      </div>
+    </div>
+
+    <div class="step" id="s4" onclick="advance(4)">
+      <div class="step-header">
+        <div class="step-number">4</div>
+        <div class="step-title">เปิดเว็บไซต์</div>
+        <div class="step-time">2 นาที</div>
+      </div>
+      <div class="step-body">
+        <ul>
+          <li>รอ 1-2 นาที</li>
+          <li>เปิด browser → พิมพ์ <code class="url">https://username.github.io</code></li>
+          <li>เห็น portfolio = สำเร็จ!</li>
+        </ul>
+        <div class="tip"><strong>404?</strong> รอ 2-3 นาที แล้ว refresh อีกที / เช็คชื่อ repo + ชื่อไฟล์</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="celebrate" id="celebrate">
+    <h2>สำเร็จแล้ว!</h2>
+    <p>ทุกคนมีเว็บไซต์ portfolio ของตัวเองแล้วค่ะ</p>
+    <p style="margin-top: 0.5rem;">แชร์ลิงก์ให้ใครก็ได้ทั่วโลก</p>
+  </div>
+
+  <footer>
+    <p>Workshop: มหาวิทยาลัยราชภัฏพิบูลสงคราม — 28 ก.พ. 2569</p>
+    <p style="margin-top: 0.3rem;">Guided by <span class="oracle">Two Rivers</span> (สองสายน้ำ) — Teaching Oracle</p>
+  </footer>
+
+</div>
+
+<script>
+  let current = 1;
+
+  function advance(n) {
+    if (n !== current) return;
+    const el = document.getElementById('s' + n);
+    el.classList.remove('active');
+    el.classList.add('done');
+    el.querySelector('.step-number').textContent = '✓';
+
+    current = n + 1;
+    const next = document.getElementById('s' + current);
+    if (next) {
+      next.classList.add('active');
+      next.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      document.getElementById('celebrate').style.display = 'block';
+      document.getElementById('celebrate').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+</script>
+</body>
+</html>

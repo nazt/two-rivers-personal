@@ -24,7 +24,9 @@
       "Bash(ghq list)",
       "Bash(find:*)",
       "Bash(grep -i \"flood\" /Users/nat/Code/github.com/Soul-Brews-Studio/two-rivers-oracle/ψ/writing/*.md)",
-      "mcp__oracle-v2__oracle_trace"
+      "mcp__oracle-v2__oracle_trace",
+      "Bash(npx wrangler:*)",
+      "Bash(grep:*)"
     ]
   }
 }
